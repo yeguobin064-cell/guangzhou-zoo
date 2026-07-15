@@ -1,0 +1,29 @@
+CompileFlags:
+  Add:
+    - "-std=c11"
+    - "-Wall"
+    - "-Wextra"
+    - "-Wpedantic"
+  Compiler: gcc
+  CompilationDatabase: build
+
+Diagnostics:
+  UnusedIncludes: Strict
+  ClangTidy:
+    Add:
+      - bugprone-*
+      - cert-*
+      - misc-*
+      - readability-*
+    Remove:
+      - readability-magic-numbers
+      - cert-err33-c
+      - misc-no-recursion
+
+Index:
+  Background: Build
+
+InlayHints:
+  Enabled: Yes
+  ParameterNames: Yes
+  DeducedTypes: Yes

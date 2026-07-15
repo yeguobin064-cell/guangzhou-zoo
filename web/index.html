@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>广州动物园智能路线规划系统</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .amap-info-content { padding: 0 !important; border-radius: 12px !important; overflow: hidden; }
+        .amap-info-sharp { display: none !important; }
+    </style>
+</head>
+<body>
+    <!-- 通知容器 -->
+    <div id="messages"></div>
+
+    <!-- ==================== 角色选择页 ==================== -->
+    <div id="page-role" class="role-page">
+        <div class="role-bg"></div>
+        <!-- 装饰动物照片 -->
+        <div class="role-deco role-deco-1">
+            <img src="images/panda.jpg" alt="大熊猫">
+        </div>
+        <div class="role-deco role-deco-2">
+            <img src="images/tiger.jpg" alt="东北虎">
+        </div>
+        <div class="role-deco role-deco-3">
+            <img src="images/elephant.jpg" alt="大象">
+        </div>
+        <div class="role-deco role-deco-4">
+            <img src="images/aquarium.jpg" alt="海洋馆">
+        </div>
+        <div class="role-deco role-deco-5">
+            <img src="images/monkey.jpg" alt="猴子">
+        </div>
+        <div class="role-deco role-deco-6">
+            <img src="images/swan.jpg" alt="天鹅">
+        </div>
+        <div class="role-content">
+            <div class="role-header">
+                <span class="role-logo">🦁</span>
+                <h1>广州动物园智能路线规划系统</h1>
+                <p class="role-desc">基于高德地图 · 图论算法驱动 · 智能游览推荐</p>
+            </div>
+            <div class="role-cards">
+                <div class="role-card" data-role="user">
+                    <div class="role-card-icon">👤</div>
+                    <h2>游客端</h2>
+                    <p>浏览园区地图、查看景点信息、查询最短路线、生成游览方案</p>
+                    <ul>
+                        <li>🗺️ 实时园区地图</li>
+                        <li>📍 景点信息浏览</li>
+                        <li>🔍 最短路径查询</li>
+                        <li>🎲 随机路线生成</li>
+                    </ul>
+                    <button class="btn btn-primary btn-block">进入游客端</button>
+                </div>
+                <div class="role-card" data-role="admin">
+                    <div class="role-card-icon">🛡️</div>
+                    <h2>管理端</h2>
+                    <p>管理景点数据、增删查改景点信息、维护园区数据</p>
+                    <ul>
+                        <li>⚙️ 景点增删查改</li>
+                        <li>📊 数据统计总览</li>
+                        <li>🔍 高级搜索筛选</li>
+                        <li>📋 景点详情管理</li>
+                    </ul>
+                    <button class="btn btn-success btn-block">进入管理端</button>
+                </div>
+            </div>
+            <p class="role-footer">广州动物园智能路线规划系统 · 数据结构课程设计</p>
+        </div>
+    </div>
+
+    <!-- ==================== 应用主界面 ==================== -->
+    <div id="page-app" class="app-page" style="display:none;">
+
+        <!-- 头部 -->
+        <header class="header">
+            <span class="header-logo">🦁</span>
+            <h1>广州动物园智能路线规划系统</h1>
+            <span class="header-sub" id="role-label"></span>
+            <div class="header-actions">
+                <button class="btn btn-sm btn-outline" id="btn-switch-role">切换角色</button>
+            </div>
+        </header>
+
+        <!-- 导航 -->
+        <nav class="nav">
+            <div class="nav-item active" data-view="map">🗺️ 园区地图</div>
+            <div class="nav-item" data-view="spots">📍 景点列表</div>
+            <div class="nav-item" data-view="path">🔍 路线查询</div>
+            <div class="nav-item" data-view="manage" id="nav-manage">⚙️ 景点管理</div>
+        </nav>
+
+        <!-- 主内容 -->
+        <main class="main">
+
+            <!-- 左侧边栏 -->
+            <aside class="sidebar">
+
+                <!-- 地图视图 -->
+                <section id="view-map" class="view active">
+                    <div class="card">
+                        <h2 class="card-title">🗺️ 园区概览</h2>
+                        <p style="font-size:13px;color:var(--text-3);line-height:1.8;margin-bottom:12px;">
+                            点击地图上的标记查看景点详情，使用缩放和拖拽浏览园区。
+                        </p>
+                        <div style="background:var(--bg-3);border-radius:8px;padding:12px;font-size:12px;">
+                            <div style="margin-bottom:6px;font-weight:600;color:var(--text-2);">图例说明</div>
+                            <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                                <span>🟢 入口</span>
+                                <span>🟠 展馆</span>
+                                <span>🔵 景点</span>
+                                <span>🟣 设施</span>
+                                <span>🩵 科普</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 管理端数据统计 -->
+                    <div id="admin-stats" class="card" style="display:none;">
+                        <h2 class="card-title">📊 数据统计</h2>
+                        <div class="stats-grid" id="stats-grid"></div>
+                    </div>
+
+                    <!-- 明星动物照片墙 -->
+                    <div class="card">
+                        <h2 class="card-title">📸 明星动物</h2>
+                        <div class="photo-wall">
+                            <div class="photo-item photo-large">
+                                <img src="images/panda.jpg" alt="大熊猫">
+                                <div class="photo-label">🐼 熊猫馆 · 人气No.1</div>
+                            </div>
+                            <div class="photo-item">
+                                <img src="images/tiger.jpg" alt="华南虎">
+                                <div class="photo-label">🐅 虎山</div>
+                            </div>
+                            <div class="photo-item">
+                                <img src="images/elephant.jpg" alt="大象">
+                                <div class="photo-label">🐘 大象馆</div>
+                            </div>
+                            <div class="photo-item">
+                                <img src="images/monkey.jpg" alt="金丝猴">
+                                <div class="photo-label">🐒 猴山</div>
+                            </div>
+                            <div class="photo-item photo-wide">
+                                <img src="images/aquarium.jpg" alt="海洋馆">
+                                <div class="photo-label">🐬 海洋馆 · 水族奇观</div>
+                            </div>
+                            <div class="photo-item">
+                                <img src="images/swan.jpg" alt="水禽湖">
+                                <div class="photo-label">🦢 水禽湖</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 景点列表 -->
+                <section id="view-spots" class="view">
+                    <div class="card">
+                        <h2 class="card-title">📍 景点列表</h2>
+                        <div id="spots-grid" class="spots-grid"></div>
+                    </div>
+                </section>
+
+                <!-- 路线查询 -->
+                <section id="view-path" class="view">
+                    <div class="card query-card">
+                        <h3>🔍 最短路径查询</h3>
+                        <div class="select-row">
+                            <label>起点</label>
+                            <select id="start-spot" class="form-control"></select>
+                        </div>
+                        <div class="select-row">
+                            <label>终点</label>
+                            <select id="end-spot" class="form-control"></select>
+                        </div>
+                        <button id="btn-search-path" class="btn btn-primary btn-block">查询最短路径</button>
+                        <div id="path-result"></div>
+                    </div>
+                    <div class="card query-card">
+                        <h3>🎲 随机路线生成</h3>
+                        <div class="time-row">
+                            <label>最大时间</label>
+                            <input type="number" id="max-time" class="form-control" value="120" min="0" max="480">
+                            <span>分钟（0=不限）</span>
+                        </div>
+                        <button id="btn-random-route" class="btn btn-success btn-block">生成随机路线</button>
+                        <div id="random-result"></div>
+                    </div>
+                </section>
+
+                <!-- 景点管理（仅管理端） -->
+                <section id="view-manage" class="view">
+                    <div class="card">
+                        <h2 class="card-title">⚙️ 景点管理</h2>
+                        <div class="search-bar">
+                            <input type="text" id="search-keyword" class="form-control" placeholder="输入景点名称搜索...">
+                            <select id="search-type" class="form-control" style="width:100px">
+                                <option value="all">全部</option>
+                                <option value="0">入口</option>
+                                <option value="1">展馆</option>
+                                <option value="2">景点</option>
+                                <option value="3">设施</option>
+                                <option value="4">科普</option>
+                            </select>
+                            <button id="btn-search" class="btn btn-primary btn-sm">搜索</button>
+                            <button id="btn-add-spot" class="btn btn-success btn-sm">+ 添加</button>
+                        </div>
+                        <div id="manage-table"></div>
+                    </div>
+                </section>
+
+            </aside>
+
+            <!-- 右侧地图 -->
+            <div class="map-area">
+                <div id="amap-container"></div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- ==================== 模态框 ==================== -->
+    <div id="modal-overlay" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">标题</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div id="modal-body" class="modal-body"></div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="btn-save">保存</button>
+                <button class="btn btn-danger modal-close">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 脚本 ==================== -->
+    <script src="https://webapi.amap.com/loader.js"></script>
+    <script src="data.js"></script>
+    <script src="algorithm.js"></script>
+    <script src="components.js"></script>
+    <script src="map.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,74 @@
+# === 编译产物 ===
+build/
+bin/
+lib/
+*.o
+*.obj
+*.a
+*.so
+*.dll
+*.dylib
+*.exe
+*.out
+
+# === CMake ===
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+CMakeUserPresets.json
+
+# === Ninja ===
+.ninja_deps
+.ninja_log
+*.ninja
+
+# === IDE配置 ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.cproject
+.settings/
+*.code-workspace
+.cache/
+
+# === Clangd缓存 ===
+.cache/clangd/
+
+# === 操作系统 ===
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# === 编辑器临时文件 ===
+*.bak
+*.tmp
+*.orig
+*.log
+
+# === 依赖目录 ===
+node_modules/
+vendor/
+packages/
+
+# === 环境配置 ===
+.env
+.env.local
+*.pem
+*.key
+
+# === Web前端 ===
+web/node_modules/
+web/package-lock.json
+web/dist/
+web/.cache/
+web/.parcel-cache/
+web/.vite/
+*.map
