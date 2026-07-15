@@ -164,14 +164,14 @@ class ZooApp {
 
         const result = zooAlgorithms.dijkstra(startId, endId);
         document.getElementById("path-result").innerHTML = renderPathResult(result);
-        if (result) this.map.highlightPath(result.path);
+        if (result) this.map.highlightGeometry(result.geometry, startId, endId);
     }
 
     _randomRoute() {
         const maxTime = parseInt(document.getElementById("max-time")?.value) || 0;
         const result = zooAlgorithms.generateRandomRoute(maxTime);
         document.getElementById("random-result").innerHTML = renderPathResult(result, true);
-        if (result) this.map.highlightPath(result.path, "#FF9800");
+        if (result) this.map.highlightGeometry(result.geometry, result.path[0], result.path[result.path.length - 1], "#FF9800");
     }
 
     /* ==================== 景点管理（管理端） ==================== */

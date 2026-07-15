@@ -162,10 +162,11 @@ function renderSpotDetail(spotId) {
     const edges = zooData.getAllEdges();
     const adj = [];
     edges.forEach(e => {
-        if (e.from === spotId) { const s = zooData.getSpotById(e.to); if (s) adj.push({ name: s.name, dist: e.distance }); }
-        if (e.to === spotId)   { const s = zooData.getSpotById(e.from); if (s) adj.push({ name: s.name, dist: e.distance }); }
+        const distance = zooData.getRouteDistance(e.from, e.to);
+        if (e.from === spotId) { const s = zooData.getSpotById(e.to); if (s) adj.push({ name: s.name, dist: distance }); }
+        if (e.to === spotId)   { const s = zooData.getSpotById(e.from); if (s) adj.push({ name: s.name, dist: distance }); }
     });
-    const adjHtml = adj.map(a => `<span class="adj-tag">${a.name} (${a.dist}m)</span>`).join("");
+    const adjHtml = adj.map(a => `<span class="adj-tag">${a.name} (${a.dist === null ? "道路数据加载中" : `${a.dist}m`})</span>`).join("");
 
     return `
         <div class="detail-panel">

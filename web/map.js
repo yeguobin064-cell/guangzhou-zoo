@@ -96,21 +96,16 @@ class ZooMap {
         });
     }
 
-    /** 绘制路径连线 */
+    /** Draw the curated pedestrian network routes. */
     _drawEdges() {
-        zooData.getAllEdges().forEach(edge => {
-            const from = zooData.getSpotById(edge.from);
-            const to = zooData.getSpotById(edge.to);
-            if (!from || !to) return;
-
+        zooData.getLandRoadSegments().forEach(path => {
             const polyline = new AMap.Polyline({
-                path: [[from.lng, from.lat], [to.lng, to.lat]],
+                path,
                 strokeColor: "#B0BEC5",
                 strokeWeight: 4,
                 strokeOpacity: 0.6,
                 lineJoin: "round"
             });
-
             this.map.add(polyline);
             this.polylines.push(polyline);
         });
@@ -145,18 +140,58 @@ class ZooMap {
 
     /* ==================== 路线高亮 ==================== */
 
-    /** 高亮路径 */
+    /** Highligh the same local pedestrian paths used by the routing algorithm. */
+    highlightGeometry(path, startId, endId, color = "#FF4444") {
+        this.renderAll();
+        if (!path || path.length < 2) return;
+
+        const polyline = new AMap.Polyline({
+            path,
+            strokeColor: color,
+            strokeWeight: 6,
+            strokeOpacity: 0.9,
+            lineJoin: "round",
+            showDir: true
+        });
+        this.map.add(polyline);
+        this.polylines.push(polyline);
+
+        [startId, endId].forEach((id, idx) => {
+            const spot = zooData.getSpotById(id);
+            if (!spot) return;
+            const accessPoint = zooData.getRouteAccessPoint(id) || [spot.lng, spot.lat];
+            const marker = new AMap.CircleMarker({
+                center: accessPoint,
+                radius: 18,
+                strokeColor: idx === 0 ? "#4CAF50" : "#FF4444",
+                strokeWeight: 3,
+                fillColor: idx === 0 ? "#4CAF50" : "#FF4444",
+                fillOpacity: 0.3
+            });
+            this.map.add(marker);
+            this.polylines.push(marker);
+        });
+
+        this.map.setFitView(null, false, [60, 60, 60, 60]);
+    }
+
     highlightPath(pathIds, color = "#FF4444") {
+        const geometry = [];
+        pathIds.slice(0, -1).forEach((fromId, index) => {
+            const route = zooData.getLandRoute(fromId, pathIds[index + 1]);
+            if (!route) return;
+            if (geometry.length === 0) geometry.push(...route.path);
+            else geometry.push(...route.path.slice(1));
+        });
+        return this.highlightGeometry(geometry, pathIds[0], pathIds[pathIds.length - 1], color);
+
         this.renderAll();
 
-        // 绘制高亮路径
-        for (let i = 0; i < pathIds.length - 1; i++) {
-            const from = zooData.getSpotById(pathIds[i]);
-            const to = zooData.getSpotById(pathIds[i + 1]);
-            if (!from || !to) continue;
-
+        pathIds.slice(0, -1).forEach((fromId, index) => {
+            const path = zooData.getEdgePath(fromId, pathIds[index + 1]);
+            if (!path) return;
             const polyline = new AMap.Polyline({
-                path: [[from.lng, from.lat], [to.lng, to.lat]],
+                path,
                 strokeColor: color,
                 strokeWeight: 6,
                 strokeOpacity: 0.9,
@@ -165,14 +200,15 @@ class ZooMap {
             });
             this.map.add(polyline);
             this.polylines.push(polyline);
-        }
+        });
 
         // 高亮起终点
         [pathIds[0], pathIds[pathIds.length - 1]].forEach((id, idx) => {
             const spot = zooData.getSpotById(id);
             if (!spot) return;
+            const accessPoint = zooData.getRouteAccessPoint(id) || [spot.lng, spot.lat];
             const marker = new AMap.CircleMarker({
-                center: [spot.lng, spot.lat],
+                center: accessPoint,
                 radius: 18,
                 strokeColor: idx === 0 ? "#4CAF50" : "#FF4444",
                 strokeWeight: 3,

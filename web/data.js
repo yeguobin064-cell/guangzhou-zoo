@@ -4,7 +4,7 @@
  */
 
 /* ==================== 数据版本（坐标修正后递增以自动清除旧缓存） ==================== */
-const DATA_VERSION = 2;
+const DATA_VERSION = 8;
 
 /* ==================== 常量定义 ==================== */
 
@@ -40,6 +40,121 @@ const SpotTypeIcon = {
     [SpotType.EDUCATION]: '📚'
 };
 
+/* ==================== 水域与陆地绕行 ==================== */
+
+/*
+ * 路线只能走陆地。水禽湖的范围使用地图坐标框表示，外扩的缓冲距离让
+ * 路线与湖岸保持一点间隔，避免折线刚好贴着或穿过水面。
+ */
+const WATER_AREAS = [
+    {
+        name: '水禽湖',
+        minLng: 113.30485,
+        maxLng: 113.30625,
+        minLat: 23.14180,
+        maxLat: 23.14345
+    }
+];
+const LAND_ROUTE_CLEARANCE = 0.00012;
+const ROUTE_EPSILON = 1e-10;
+
+function pointInWater(point, water) {
+    return point[0] >= water.minLng - ROUTE_EPSILON && point[0] <= water.maxLng + ROUTE_EPSILON &&
+        point[1] >= water.minLat - ROUTE_EPSILON && point[1] <= water.maxLat + ROUTE_EPSILON;
+}
+
+function orientation(a, b, c) {
+    const value = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+    if (Math.abs(value) <= ROUTE_EPSILON) return 0;
+    return value > 0 ? 1 : -1;
+}
+
+function pointOnSegment(a, b, point) {
+    return Math.min(a[0], b[0]) - ROUTE_EPSILON <= point[0] && point[0] <= Math.max(a[0], b[0]) + ROUTE_EPSILON &&
+        Math.min(a[1], b[1]) - ROUTE_EPSILON <= point[1] && point[1] <= Math.max(a[1], b[1]) + ROUTE_EPSILON;
+}
+
+function segmentsIntersect(a, b, c, d) {
+    const o1 = orientation(a, b, c);
+    const o2 = orientation(a, b, d);
+    const o3 = orientation(c, d, a);
+    const o4 = orientation(c, d, b);
+    if (o1 !== o2 && o3 !== o4) return true;
+    return (o1 === 0 && pointOnSegment(a, b, c)) ||
+        (o2 === 0 && pointOnSegment(a, b, d)) ||
+        (o3 === 0 && pointOnSegment(c, d, a)) ||
+        (o4 === 0 && pointOnSegment(c, d, b));
+}
+
+function segmentCrossesWater(start, end, water) {
+    if (pointInWater(start, water) || pointInWater(end, water)) return true;
+    const corners = [
+        [water.minLng, water.minLat], [water.maxLng, water.minLat],
+        [water.maxLng, water.maxLat], [water.minLng, water.maxLat]
+    ];
+    return corners.some((corner, index) => segmentsIntersect(start, end, corner, corners[(index + 1) % corners.length]));
+}
+
+function routeLength(a, b) {
+    return Math.hypot(a[0] - b[0], a[1] - b[1]);
+}
+
+/* 使用湖区四个外扩角点构建可见图，选择最短的陆地绕行折线。 */
+function detourAroundWater(start, end, water) {
+    if (!segmentCrossesWater(start, end, water)) return [start, end];
+
+    const c = LAND_ROUTE_CLEARANCE;
+    const vertices = [
+        start,
+        [water.minLng - c, water.minLat - c],
+        [water.maxLng + c, water.minLat - c],
+        [water.maxLng + c, water.maxLat + c],
+        [water.minLng - c, water.maxLat + c],
+        end
+    ];
+    const distance = Array(vertices.length).fill(Infinity);
+    const previous = Array(vertices.length).fill(-1);
+    const visited = Array(vertices.length).fill(false);
+    distance[0] = 0;
+
+    for (let step = 0; step < vertices.length; step++) {
+        let current = -1;
+        for (let i = 0; i < vertices.length; i++) {
+            if (!visited[i] && (current === -1 || distance[i] < distance[current])) current = i;
+        }
+        if (current === -1 || current === vertices.length - 1) break;
+        visited[current] = true;
+
+        for (let next = 0; next < vertices.length; next++) {
+            if (visited[next] || segmentCrossesWater(vertices[current], vertices[next], water)) continue;
+            const candidate = distance[current] + routeLength(vertices[current], vertices[next]);
+            if (candidate < distance[next]) {
+                distance[next] = candidate;
+                previous[next] = current;
+            }
+        }
+    }
+
+    if (!Number.isFinite(distance[vertices.length - 1])) return [start, end];
+    const route = [];
+    for (let current = vertices.length - 1; current !== -1; current = previous[current]) {
+        route.unshift(vertices[current]);
+    }
+    return route;
+}
+
+function getLandRoute(path) {
+    return WATER_AREAS.reduce((safePath, water) => {
+        const nextPath = [];
+        for (let i = 0; i < safePath.length - 1; i++) {
+            const segment = detourAroundWater(safePath[i], safePath[i + 1], water);
+            if (i === 0) nextPath.push(segment[0]);
+            nextPath.push(...segment.slice(1));
+        }
+        return nextPath;
+    }, path);
+}
+
 /* ==================== 景点数据（高德坐标） ==================== */
 
 const spots = [
@@ -62,12 +177,15 @@ const edges = [
     { from: 0, to: 2, distance: 200 },
     { from: 1, to: 2, distance: 120 },
     { from: 1, to: 4, distance: 420 },
-    { from: 2, to: 3, distance: 350 },
+    { from: 2, to: 3, distance: 350,
+      waypoints: [[113.3046,23.1404],[113.3062,23.1414]] },      // 经公共厕所A、猴山绕开水域
     { from: 2, to: 4, distance: 340 },
-    { from: 3, to: 6, distance: 500 },
+    { from: 3, to: 6, distance: 500,
+      waypoints: [[113.3052,23.1451],[113.3064,23.1442]] },      // 经科普馆北侧绕开水域
     { from: 3, to: 7, distance: 320 },
     { from: 4, to: 5, distance: 190 },
-    { from: 5, to: 6, distance: 520 },
+    { from: 5, to: 6, distance: 520,
+      waypoints: [[113.3034,23.1417],[113.3064,23.1417]] },      // 经南侧绕行至公共厕所B
     { from: 6, to: 7, distance: 180 },
     { from: 0, to: 8, distance: 80  },
     { from: 1, to: 8, distance: 100 },
@@ -75,15 +193,122 @@ const edges = [
     { from: 4, to: 9, distance: 90  },
     { from: 5, to: 9, distance: 110 },
     { from: 6, to: 9, distance: 150 },
-    { from: 3, to: 9, distance: 200 },
+    { from: 3, to: 9, distance: 200,
+      waypoints: [[113.3048,23.1445],[113.3064,23.1445]] },      // 经北侧绕开水域
     { from: 7, to: 9, distance: 160 }
 ];
+
+/*
+ * Curated pedestrian network for the zoo. The intermediate nodes follow the
+ * visible west, north, east, and south land corridors around the lake system.
+ * Water is deliberately absent from this graph, so a route can never cross it.
+ * Attraction marker positions are intentionally not used as walking nodes.
+ */
+const LAND_ROAD_NODES = {
+    // West-side pedestrian corridor.
+    gateWest: [113.30318, 23.14330],
+    westNorth: [113.30348, 23.14390],
+    westUpper: [113.30328, 23.14295],
+    westMiddle: [113.30328, 23.14225],
+    westLower: [113.30332, 23.14178],
+    tigerNorth: [113.30348, 23.14128],
+    tigerSouth: [113.30362, 23.14072],
+    southWest: [113.30402, 23.14022],
+
+    // Middle land corridor: west of the inner ponds and the main lake.
+    middleEntry: [113.30370, 23.14302],
+    middleNorth: [113.30395, 23.14288],
+    middleWest: [113.30410, 23.14258],
+    middleCenter: [113.30398, 23.14226],
+    middleLower: [113.30392, 23.14190],
+    middleSouth: [113.30398, 23.14152],
+    middleExit: [113.30405, 23.14114],
+    middleSouthExit: [113.30406, 23.14074],
+
+    // Northern path.
+    northWest: [113.30412, 23.14400],
+    oceanWest: [113.30448, 23.14392],
+    northArc: [113.30488, 23.14447],
+    scienceWest: [113.30508, 23.14478],
+    scienceEast: [113.30556, 23.14492],
+    northEast: [113.30602, 23.14460],
+
+    // East-side path along the lake shore.
+    eastUpper: [113.30655, 23.14382],
+    waterfowlNorth: [113.30658, 23.14315],
+    waterfowlAccess: [113.30658, 23.14272],
+    eastMiddle: [113.30656, 23.14210],
+    restroomBAccess: [113.30650, 23.14172],
+    eastLower: [113.30648, 23.14132],
+    pandaAccess: [113.30635, 23.14092],
+
+    // Southern pedestrian corridor.
+    southEast: [113.30582, 23.14048],
+    restroomAAccess: [113.30472, 23.14040],
+    elephantAccess: [113.30496, 23.14016]
+};
+
+/*
+ * A marker can represent a building or a lake rather than a point visitors
+ * can stand on. Routes end at its nearest land-side entrance instead.
+ */
+const LAND_ACCESS_POINTS = {
+    6: [113.30658, 23.14272]
+};
+
+/*
+ * These are curated display vertices for walkable paths, not connections
+ * between attraction markers. Every link stays on a surveyed land corridor;
+ * the middle branch passes west of the ponds rather than across the lake.
+ */
+const LAND_ROAD_LINKS = [
+    ["spot-0", "gateWest"], ["gateWest", "westNorth"],
+    ["westNorth", "westUpper"], ["westUpper", "westMiddle"],
+    ["westMiddle", "westLower"], ["westLower", "tigerNorth"],
+    ["tigerNorth", "spot-5"], ["spot-5", "tigerSouth"],
+    ["tigerSouth", "southWest"],
+
+    ["westUpper", "middleEntry"], ["middleEntry", "middleNorth"],
+    ["middleNorth", "middleWest"], ["middleWest", "middleCenter"],
+    ["middleCenter", "middleLower"], ["middleLower", "middleSouth"],
+    ["middleSouth", "middleExit"], ["middleExit", "middleSouthExit"],
+    ["middleSouthExit", "southWest"],
+
+    ["westNorth", "northWest"], ["northWest", "oceanWest"],
+    ["oceanWest", "spot-3"],
+    ["northWest", "northArc"], ["northArc", "scienceWest"],
+    ["scienceWest", "spot-7"], ["spot-7", "scienceEast"],
+    ["scienceEast", "northEast"],
+
+    ["northEast", "eastUpper"], ["eastUpper", "waterfowlNorth"],
+    ["waterfowlNorth", "waterfowlAccess"], ["waterfowlAccess", "spot-6"],
+    ["waterfowlNorth", "eastMiddle"], ["eastMiddle", "restroomBAccess"],
+    ["restroomBAccess", "spot-9"], ["restroomBAccess", "eastLower"],
+    ["eastLower", "spot-4"], ["eastLower", "pandaAccess"],
+    ["pandaAccess", "spot-1"], ["pandaAccess", "southEast"],
+
+    ["southEast", "restroomAAccess"], ["restroomAAccess", "spot-8"],
+    ["restroomAAccess", "elephantAccess"], ["elephantAccess", "spot-2"],
+    ["restroomAAccess", "southWest"]
+];
+
+function landDistance(a, b) {
+    const rad = Math.PI / 180;
+    const lat1 = a[1] * rad;
+    const lat2 = b[1] * rad;
+    const deltaLat = (b[1] - a[1]) * rad;
+    const deltaLng = (b[0] - a[0]) * rad;
+    const h = Math.sin(deltaLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLng / 2) ** 2;
+    return 6371000 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
 
 /* ==================== 数据管理类 ==================== */
 
 class ZooData {
     constructor() {
         this._listeners = [];
+        this._routeDistances = new Map();
+        this._landRouteCache = new Map();
         this._load();
     }
 
@@ -134,7 +359,12 @@ class ZooData {
 
     /* 事件订阅 */
     onChange(fn) { this._listeners.push(fn); }
-    _notify() { this._save(); this._listeners.forEach(fn => fn()); }
+    _notify() {
+        this._routeDistances.clear();
+        this._landRouteCache.clear();
+        this._save();
+        this._listeners.forEach(fn => fn());
+    }
 
     /* 查询 */
     getAllSpots() { return this._spots; }
@@ -143,13 +373,120 @@ class ZooData {
     getSpotsByType(type) { return this._spots.filter(s => s.type === type); }
     getAllEdges() { return this._edges; }
 
+    _edgeKey(fromId, toId) {
+        return fromId < toId ? `${fromId}-${toId}` : `${toId}-${fromId}`;
+    }
+
+    setRouteDistance(fromId, toId, distance) {
+        if (!Number.isFinite(distance) || distance <= 0) return;
+        this._routeDistances.set(this._edgeKey(fromId, toId), Math.round(distance));
+    }
+
+    getRouteDistance(fromId, toId) {
+        const key = this._edgeKey(fromId, toId);
+        if (this._routeDistances.has(key)) return this._routeDistances.get(key);
+        const route = this.getLandRoute(fromId, toId);
+        return route ? route.distance : null;
+    }
+
+    _roadCoordinates() {
+        const coordinates = { ...LAND_ROAD_NODES };
+        this._spots.forEach(spot => {
+            coordinates[`spot-${spot.id}`] = this.getRouteAccessPoint(spot.id);
+        });
+        return coordinates;
+    }
+
+    getRouteAccessPoint(spotId) {
+        const accessPoint = LAND_ACCESS_POINTS[spotId];
+        if (accessPoint) return [...accessPoint];
+        const spot = this.getSpotById(spotId);
+        return spot ? [spot.lng, spot.lat] : null;
+    }
+
+    getLandRoadSegments() {
+        const coordinates = this._roadCoordinates();
+        return LAND_ROAD_LINKS
+            .filter(([from, to]) => coordinates[from] && coordinates[to])
+            .map(([from, to]) => [coordinates[from], coordinates[to]]);
+    }
+
+    /**
+     * Find a route on the curated pedestrian network. Its vertices are all
+     * land-side paths, so the returned polyline is also the routing geometry.
+     */
+    getLandRoute(fromId, toId) {
+        const cacheKey = `${fromId}-${toId}`;
+        if (this._landRouteCache.has(cacheKey)) return this._landRouteCache.get(cacheKey);
+
+        const coordinates = this._roadCoordinates();
+        const start = `spot-${fromId}`;
+        const end = `spot-${toId}`;
+        if (!coordinates[start] || !coordinates[end]) return null;
+
+        const adjacency = Object.fromEntries(Object.keys(coordinates).map(key => [key, []]));
+        LAND_ROAD_LINKS.forEach(([from, to]) => {
+            if (!coordinates[from] || !coordinates[to]) return;
+            const distance = landDistance(coordinates[from], coordinates[to]);
+            adjacency[from].push({ to, distance });
+            adjacency[to].push({ to: from, distance });
+        });
+
+        const distance = Object.fromEntries(Object.keys(coordinates).map(key => [key, Infinity]));
+        const previous = {};
+        const visited = new Set();
+        distance[start] = 0;
+
+        while (visited.size < Object.keys(coordinates).length) {
+            let current = null;
+            Object.keys(coordinates).forEach(key => {
+                if (!visited.has(key) && (current === null || distance[key] < distance[current])) current = key;
+            });
+            if (current === null || !Number.isFinite(distance[current])) break;
+            if (current === end) break;
+            visited.add(current);
+            adjacency[current].forEach(link => {
+                const nextDistance = distance[current] + link.distance;
+                if (nextDistance < distance[link.to]) {
+                    distance[link.to] = nextDistance;
+                    previous[link.to] = current;
+                }
+            });
+        }
+        if (!Number.isFinite(distance[end])) return null;
+
+        const nodePath = [];
+        for (let current = end; current; current = previous[current]) {
+            nodePath.unshift(current);
+            if (current === start) break;
+        }
+        const route = {
+            path: nodePath.map(key => coordinates[key]),
+            distance: Math.round(distance[end])
+        };
+        this._landRouteCache.set(cacheKey, route);
+        this.setRouteDistance(fromId, toId, route.distance);
+        return route;
+    }
+
+    getEdgePath(fromId, toId) {
+        const edge = this._edges.find(e =>
+            (e.from === fromId && e.to === toId) || (e.from === toId && e.to === fromId)
+        );
+        if (!edge) return null;
+        return this.getLandRoute(fromId, toId)?.path ?? null;
+    }
+
     getAdjacencyList() {
         const adj = {};
         this._spots.forEach(s => { adj[s.id] = []; });
         this._edges.forEach(e => {
-            const time = Math.ceil(e.distance / 50);
-            adj[e.from].push({ to: e.to, distance: e.distance, time });
-            adj[e.to].push({ to: e.from, distance: e.distance, time });
+            // 只采用步行导航返回的实际陆地距离；没有道路数据的边不参与最短路径。
+            const distance = this.getRouteDistance(e.from, e.to);
+            if (distance === null) return;
+            const time = Math.ceil(distance / 50);
+            adj[e.from].push({ to: e.to, distance, time });
+            adj[e.to].push({ to: e.from, distance, time });
         });
         return adj;
     }

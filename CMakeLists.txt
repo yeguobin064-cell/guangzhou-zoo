@@ -27,7 +27,9 @@ include_directories(include)
 add_executable(zoo_route ${SOURCES})
 
 # 链接数学库（如果需要）
-target_link_libraries(zoo_route m)
+if(NOT MSVC)
+    target_link_libraries(zoo_route m)
+endif()
 
 # 设置编译选项
 if(MSVC)

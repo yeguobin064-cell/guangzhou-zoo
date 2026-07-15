@@ -16,69 +16,19 @@ class ZooAlgorithms {
      */
     dijkstra(startIdx, endIdx) {
         const spots = this.data.getAllSpots();
-        const adj = this.data.getAdjacencyList();
-        const n = spots.length;
+        if (!this.data.getSpotById(startIdx) || !this.data.getSpotById(endIdx)) return null;
 
-        if (startIdx < 0 || startIdx >= n || endIdx < 0 || endIdx >= n) {
-            return null;
-        }
-
-        const dist = new Array(n).fill(Infinity);
-        const prev = new Array(n).fill(-1);
-        const visited = new Array(n).fill(false);
-        const timeDist = new Array(n).fill(Infinity);
-
-        dist[startIdx] = 0;
-        timeDist[startIdx] = 0;
-
-        for (let i = 0; i < n; i++) {
-            let minDist = Infinity;
-            let u = -1;
-
-            for (let j = 0; j < n; j++) {
-                if (!visited[j] && dist[j] < minDist) {
-                    minDist = dist[j];
-                    u = j;
-                }
-            }
-
-            if (u === -1) break;
-            visited[u] = true;
-
-            if (u === endIdx) break;
-
-            if (adj[u]) {
-                adj[u].forEach(edge => {
-                    const v = edge.to;
-                    if (!visited[v]) {
-                        const newDist = dist[u] + edge.distance;
-                        const newTime = timeDist[u] + edge.time;
-                        if (newDist < dist[v]) {
-                            dist[v] = newDist;
-                            prev[v] = u;
-                            timeDist[v] = newTime;
-                        }
-                    }
-                });
-            }
-        }
-
-        if (dist[endIdx] === Infinity) {
-            return null;
-        }
-
-        const path = [];
-        let current = endIdx;
-        while (current !== -1) {
-            path.unshift(current);
-            current = prev[current];
-        }
+        // Search the pedestrian-road graph directly. The attraction edge list
+        // is only for management display and must not constrain a shortest walk.
+        const route = this.data.getLandRoute(startIdx, endIdx);
+        if (!route) return null;
 
         return {
-            path,
-            totalDistance: dist[endIdx],
-            totalTime: timeDist[endIdx],
-            spotCount: path.length
+            path: [startIdx, endIdx],
+            geometry: route.path,
+            totalDistance: route.distance,
+            totalTime: Math.ceil(route.distance / 50),
+            spotCount: 2
         };
     }
 
@@ -158,6 +108,7 @@ class ZooAlgorithms {
 
         // 拼接完整路径
         const fullPath = [];
+        const fullGeometry = [];
         let totalDist = 0;
         let totalTime = 0;
 
@@ -169,6 +120,8 @@ class ZooAlgorithms {
             for (let j = start; j < seg.path.length; j++) {
                 fullPath.push(seg.path[j]);
             }
+            if (i === 0) fullGeometry.push(...seg.geometry);
+            else fullGeometry.push(...seg.geometry.slice(1));
             totalDist += seg.totalDistance;
             totalTime += seg.totalTime;
         }
@@ -182,6 +135,7 @@ class ZooAlgorithms {
 
         return {
             path: fullPath,
+            geometry: fullGeometry,
             totalDistance: totalDist,
             walkTime: totalTime - visitTotal,
             visitTime: visitTotal,
